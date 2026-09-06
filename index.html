@@ -303,6 +303,7 @@ header.top{
 .confirm:disabled{opacity:.5}
 
 footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)}
+#resetTapTarget{user-select:none;-webkit-user-select:none}
 .install-btn{
   display:block;margin:12px auto 0;padding:9px 18px;border-radius:var(--r-sm);
   background:var(--surface);border:1px solid var(--border);color:var(--amber-300);
@@ -411,7 +412,7 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
   </section>
 
   <footer>
-    Çayxana idarəetmə paneli
+    <span id="resetTapTarget">Çayxana idarəetmə paneli</span>
     <button id="installBtn" class="install-btn hidden">⬇️ Telefona yüklə</button>
   </footer>
 </div>
@@ -549,8 +550,38 @@ async function initApp(){
   bindHesabat();
   bindXercler();
   bindMehsullar();
+  bindResetTap();
   await ensureSeeded();
   attachRealtimeListener();
+}
+
+// Gizli test-data sıfırlama: footer mətninə 2 saniyə ərzində 6 dəfə ardıcıl
+// vurulduqda satış/sifariş/xərc tarixçəsini təsdiqlə silir. Stollar, məhsullar
+// və sürətli-seçimlərə toxunmur.
+function bindResetTap(){
+  let tapCount = 0;
+  let tapTimer = null;
+  document.getElementById('resetTapTarget').addEventListener('click', ()=>{
+    tapCount++;
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(()=>{ tapCount = 0; }, 2000);
+    if(tapCount >= 6){
+      tapCount = 0;
+      clearTimeout(tapTimer);
+      resetTestData();
+    }
+  });
+}
+
+async function resetTestData(){
+  const ok = confirm('Bütün satış, açıq sifariş və xərc tarixçəsi silinəcək (stollar, məhsullar və sürətli-seçimlərə toxunulmayacaq). Bu əməliyyat geri qaytarılmır. Davam edilsin?');
+  if(!ok) return;
+  try{
+    await remove(ref(db, '/sales'));
+    await remove(ref(db, '/orders'));
+    await remove(ref(db, '/expenses'));
+    alert('Test datası silindi.');
+  }catch(err){ reportError(err); }
 }
 
 // PWA quraşdırma hadisəsi (beforeinstallprompt) səhifə açılan kimi, hələ
