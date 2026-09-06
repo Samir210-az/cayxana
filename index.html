@@ -287,8 +287,9 @@ header.top{
 .field input:focus{border-color:var(--border2)}
 .modal-actions{display:flex;gap:10px;margin-top:18px}
 .modal-actions button{flex:1;padding:12px;border-radius:var(--r-sm);font-weight:700;font-size:14px}
-.modal-actions .cancel{background:var(--surface);color:var(--text-dim);border:1px solid var(--border)}
-.modal-actions .confirm{background:linear-gradient(145deg,var(--amber-400),var(--amber-500));color:#241608}
+.cancel{background:var(--surface);color:var(--text-dim);border:1px solid var(--border);padding:12px;border-radius:var(--r-sm);font-weight:700;font-size:14px}
+.confirm{background:linear-gradient(145deg,var(--amber-400),var(--amber-500));color:#241608;padding:12px;border-radius:var(--r-sm);font-weight:700;font-size:14px}
+.confirm:disabled{opacity:.5}
 
 footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)}
 .install-btn{
@@ -1011,13 +1012,13 @@ function openAddExpenseModal(){
    ============================================================ */
 function openAddProductModal(){
   const PRESETS = ['Coca-Cola', 'Fanta', 'Su 0,5L', 'Su 1L', 'Su 2L', 'Şokolad', 'Mürəbbə'];
-  let pending = []; // { name, price }
+  const added = []; // bu sessiyada əlavə olunanların qısa siyahısı (yalnız məlumat üçün)
   const root = document.getElementById('modalRoot');
 
   root.innerHTML = `
     <div class="modal-backdrop" id="modalBackdrop">
       <div class="modal">
-        <h3>Məhsul(lar) əlavə et</h3>
+        <h3>Yeni məhsul</h3>
         <div class="preset-chips" id="presetChips">
           ${PRESETS.map(p=>`<button type="button" class="preset-chip" data-name="${p}">${p}</button>`).join('')}
         </div>
@@ -1029,11 +1030,10 @@ function openAddProductModal(){
           <label>Qiymət (₼)</label>
           <input id="newProductPrice" type="number" step="0.01" min="0" placeholder="Məs: 3.50">
         </div>
-        <button type="button" class="ghost-btn" id="addRowBtn" style="margin-bottom:14px">+ Siyahıya əlavə et</button>
-        <div class="expense-list" id="pendingRows"></div>
+        <button type="button" class="confirm" id="addBtn" style="width:100%;margin-bottom:14px">Əlavə et</button>
+        <div class="expense-list" id="addedRows"></div>
         <div class="modal-actions">
-          <button class="cancel" id="modalCancel">Ləğv et</button>
-          <button class="confirm" id="modalConfirm" disabled>Məhsul siyahısına əlavə et</button>
+          <button class="cancel" id="modalClose" style="flex:1">Bağla</button>
         </div>
       </div>
     </div>
@@ -1041,44 +1041,41 @@ function openAddProductModal(){
   const close = ()=> root.innerHTML = '';
   const nameInput = document.getElementById('newProductName');
   const priceInput = document.getElementById('newProductPrice');
-  const confirmBtn = document.getElementById('modalConfirm');
-  const rowsEl = document.getElementById('pendingRows');
+  const addBtn = document.getElementById('addBtn');
+  const rowsEl = document.getElementById('addedRows');
 
-  function renderRows(){
-    if(pending.length === 0){
-      rowsEl.innerHTML = '';
-      confirmBtn.disabled = true;
-      return;
-    }
-    confirmBtn.disabled = false;
-    rowsEl.innerHTML = pending.map((it,i)=>`
+  function renderAdded(){
+    if(added.length === 0){ rowsEl.innerHTML = ''; return; }
+    rowsEl.innerHTML = added.map(it=>`
       <div class="expense-row">
         <div>
-          <div class="nm">${it.name}</div>
-          <div class="dt">${money(it.price)}</div>
+          <div class="nm">✓ ${it.name}</div>
+          <div class="dt">${money(it.price)} — məhsul siyahısına əlavə olundu</div>
         </div>
-        <button type="button" class="del" data-i="${i}" title="Sil">×</button>
       </div>
     `).join('');
-    rowsEl.querySelectorAll('.del').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        pending.splice(Number(btn.dataset.i), 1);
-        renderRows();
-      });
-    });
   }
 
-  function addToPending(){
+  async function submitProduct(){
     const name = nameInput.value.trim();
     const price = parseFloat(priceInput.value);
-    if(!name || isNaN(price) || price < 0) return;
-    if(pending.some(it=>it.name.toLowerCase() === name.toLowerCase())) return; // artıq siyahıda var
-    pending.push({ name, price });
-    nameInput.value = '';
-    priceInput.value = '';
-    document.querySelectorAll('#presetChips .preset-chip').forEach(c=>c.classList.remove('selected'));
-    nameInput.focus();
-    renderRows();
+    if(!name){ nameInput.focus(); return; }
+    if(isNaN(price) || price < 0){ priceInput.focus(); return; }
+    addBtn.disabled = true;
+    try{
+      const productRef = push(ref(db, '/products'));
+      await set(productRef, { name, price });
+      added.unshift({ name, price });
+      renderAdded();
+      nameInput.value = '';
+      priceInput.value = '';
+      document.querySelectorAll('#presetChips .preset-chip').forEach(c=>c.classList.remove('selected'));
+      nameInput.focus();
+    }catch(err){
+      reportError(err);
+    }finally{
+      addBtn.disabled = false;
+    }
   }
 
   document.querySelectorAll('#presetChips .preset-chip').forEach(chip=>{
@@ -1088,26 +1085,12 @@ function openAddProductModal(){
       priceInput.focus();
     });
   });
-  document.getElementById('addRowBtn').addEventListener('click', addToPending);
+  addBtn.addEventListener('click', submitProduct);
   nameInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); priceInput.focus(); } });
-  priceInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); addToPending(); } });
+  priceInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); submitProduct(); } });
 
   document.getElementById('modalBackdrop').addEventListener('click', (e)=>{ if(e.target.id==='modalBackdrop') close(); });
-  document.getElementById('modalCancel').addEventListener('click', close);
-  confirmBtn.addEventListener('click', async ()=>{
-    if(pending.length === 0) return;
-    confirmBtn.disabled = true;
-    try{
-      for(const it of pending){
-        const productRef = push(ref(db, '/products'));
-        await set(productRef, { name: it.name, price: it.price });
-      }
-      close();
-    }catch(err){
-      confirmBtn.disabled = false;
-      reportError(err);
-    }
-  });
+  document.getElementById('modalClose').addEventListener('click', close);
   setTimeout(()=>nameInput.focus(), 50);
 }
 </script>
