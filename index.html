@@ -723,7 +723,7 @@ function renderProductsGridIfChanged(){
   const addTile = document.createElement('button');
   addTile.className = 'product-btn add-product-tile';
   addTile.innerHTML = '<span class="pn">+ Yeni</span>';
-  addTile.addEventListener('click', ()=> openAddProductModal(true));
+  addTile.addEventListener('click', openAddProductModal);
   pGrid.appendChild(addTile);
 }
 
@@ -907,7 +907,7 @@ async function deleteExpense(key){
    MƏHSULLAR (kataloq idarəetməsi — əlavə/silmə yalnız burda)
    ============================================================ */
 function bindMehsullar(){
-  document.getElementById('btnAddProductPage').addEventListener('click', ()=> openAddProductModal(false));
+  document.getElementById('btnAddProductPage').addEventListener('click', openAddProductModal);
 }
 
 function renderMehsullar(){
@@ -980,9 +980,9 @@ function openAddExpenseModal(){
    əlavə et" ilə hamısını bir dəfəyə həm daimi kataloqa, həm də
    cari sifarişə yazır.
    ============================================================ */
-function openAddProductModal(addToOrder = true){
+function openAddProductModal(){
   const PRESETS = ['Coca-Cola', 'Fanta', 'Su 0,5L', 'Su 1L', 'Su 2L', 'Şokolad', 'Mürəbbə'];
-  let pending = []; // { name, price, qty }
+  let pending = []; // { name, price }
   const root = document.getElementById('modalRoot');
 
   root.innerHTML = `
@@ -1001,10 +1001,10 @@ function openAddProductModal(addToOrder = true){
           <input id="newProductPrice" type="number" step="0.01" min="0" placeholder="Məs: 3.50">
         </div>
         <button type="button" class="ghost-btn" id="addRowBtn" style="margin-bottom:14px">+ Siyahıya əlavə et</button>
-        <div class="order-list" id="pendingRows"></div>
+        <div class="expense-list" id="pendingRows"></div>
         <div class="modal-actions">
           <button class="cancel" id="modalCancel">Ləğv et</button>
-          <button class="confirm" id="modalConfirm" disabled>Sifarişə əlavə et</button>
+          <button class="confirm" id="modalConfirm" disabled>Məhsul siyahısına əlavə et</button>
         </div>
       </div>
     </div>
@@ -1023,24 +1023,17 @@ function openAddProductModal(addToOrder = true){
     }
     confirmBtn.disabled = false;
     rowsEl.innerHTML = pending.map((it,i)=>`
-      <div class="order-line">
+      <div class="expense-row">
         <div>
-          <span class="nm">${it.name}</span><br>
-          <span class="sub">${money(it.price)} / ədəd</span>
+          <div class="nm">${it.name}</div>
+          <div class="dt">${money(it.price)}</div>
         </div>
-        <div class="qty-ctrl">
-          <button type="button" data-act="dec" data-i="${i}">−</button>
-          <span>${it.qty}</span>
-          <button type="button" data-act="inc" data-i="${i}">+</button>
-        </div>
-        <div class="line-total">${money(it.price*it.qty)}</div>
+        <button type="button" class="del" data-i="${i}" title="Sil">×</button>
       </div>
     `).join('');
-    rowsEl.querySelectorAll('[data-act]').forEach(btn=>{
+    rowsEl.querySelectorAll('.del').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        const i = Number(btn.dataset.i);
-        pending[i].qty += (btn.dataset.act === 'inc' ? 1 : -1);
-        if(pending[i].qty <= 0) pending.splice(i,1);
+        pending.splice(Number(btn.dataset.i), 1);
         renderRows();
       });
     });
@@ -1050,9 +1043,8 @@ function openAddProductModal(addToOrder = true){
     const name = nameInput.value.trim();
     const price = parseFloat(priceInput.value);
     if(!name || isNaN(price) || price < 0) return;
-    const existing = pending.find(it=>it.name.toLowerCase() === name.toLowerCase());
-    if(existing){ existing.qty += 1; }
-    else{ pending.push({ name, price, qty: 1 }); }
+    if(pending.some(it=>it.name.toLowerCase() === name.toLowerCase())) return; // artıq siyahıda var
+    pending.push({ name, price });
     nameInput.value = '';
     priceInput.value = '';
     document.querySelectorAll('#presetChips .preset-chip').forEach(c=>c.classList.remove('selected'));
@@ -1078,9 +1070,6 @@ function openAddProductModal(addToOrder = true){
     for(const it of pending){
       const productRef = push(ref(db, '/products'));
       await set(productRef, { name: it.name, price: it.price });
-      if(addToOrder && currentTableKey){
-        await addItemToOrder({ key: productRef.key, name: it.name, price: it.price }, it.qty);
-      }
     }
     close();
   });
