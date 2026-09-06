@@ -1,0 +1,17 @@
+{
+  "name": "Çayxana İdarəetmə Paneli",
+  "short_name": "Çayxana",
+  "description": "Çayxana idarəetmə paneli — stollar, sifariş, hesabat və xərclər",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1108",
+  "theme_color": "#241608",
+  "lang": "az",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
