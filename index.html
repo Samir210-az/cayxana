@@ -60,13 +60,22 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
   position:fixed;inset:0;z-index:100;
   display:flex;align-items:center;justify-content:center;
   padding:20px;
-  background-image:
-    linear-gradient(180deg, rgba(13,7,3,0.45), rgba(13,7,3,0.82)),
-    url('assets/samovar.png');
-  background-size:cover;
-  background-position:center;
+  overflow:hidden;
+}
+#lock video{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+  z-index:0;
+}
+#lock::before{
+  content:'';
+  position:absolute;inset:0;
+  background:linear-gradient(180deg, rgba(13,7,3,0.45), rgba(13,7,3,0.82));
+  z-index:1;
 }
 .lock-card{
+  position:relative;z-index:2;
   width:100%;max-width:240px;
   background:rgba(20,12,4,0.55);
   backdrop-filter:blur(14px);
@@ -320,6 +329,9 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
 
 <!-- ================= LOCK ================= -->
 <div id="lock">
+  <video autoplay muted loop playsinline poster="assets/samovar.png">
+    <source src="assets/samovar-bg.mp4" type="video/mp4">
+  </video>
   <div class="lock-card">
     <h1>Çayxana · Giriş</h1>
     <form id="lockForm" autocomplete="off">
