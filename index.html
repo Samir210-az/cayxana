@@ -639,8 +639,8 @@ function renderMasa(){
   });
   const addTile = document.createElement('button');
   addTile.className = 'product-btn add-product-tile';
-  addTile.innerHTML = '<span class="pn">+ Digər</span>';
-  addTile.addEventListener('click', openAddOrderItemModal);
+  addTile.innerHTML = '<span class="pn">+ Yeni</span>';
+  addTile.addEventListener('click', openAddProductModal);
   pGrid.appendChild(addTile);
 
   // Sifariş sətirləri
@@ -857,44 +857,37 @@ function openAddExpenseModal(){
 }
 
 /* ============================================================
-   MODAL — Sifarişə əlavə məhsul (daimi kataloqa yazılmır,
-   yalnız bu sifarişə əlavə olunur)
+   MODAL — Yeni məhsul (daimi kataloqa yazılır — bir dəfə əlavə
+   edildikdən sonra bütün masalarda daim görünür)
    ============================================================ */
-function nameKey(name){
-  // Unicode-təhlükəsiz, sabit açar: eyni ad həmişə eyni açarı verir
-  return 'x_' + Array.from(name.trim().toLowerCase())
-    .map(ch=>ch.codePointAt(0).toString(36))
-    .join('');
-}
-
-function openAddOrderItemModal(){
+function openAddProductModal(){
   const PRESETS = ['Coca-Cola', 'Fanta', 'Su 0,5L', 'Su 1L', 'Su 2L', 'Şokolad', 'Mürəbbə'];
   const root = document.getElementById('modalRoot');
   root.innerHTML = `
     <div class="modal-backdrop" id="modalBackdrop">
       <div class="modal">
-        <h3>Sifarişə məhsul əlavə et</h3>
+        <h3>Yeni məhsul</h3>
         <div class="preset-chips" id="presetChips">
           ${PRESETS.map(p=>`<button type="button" class="preset-chip" data-name="${p}">${p}</button>`).join('')}
         </div>
         <div class="field">
           <label>Ad</label>
-          <input id="newItemName" type="text" placeholder="Yuxarıdan seç və ya özün yaz">
+          <input id="newProductName" type="text" placeholder="Yuxarıdan seç və ya özün yaz">
         </div>
         <div class="field">
           <label>Qiymət (₼)</label>
-          <input id="newItemPrice" type="number" step="0.01" min="0" placeholder="Məs: 3.50">
+          <input id="newProductPrice" type="number" step="0.01" min="0" placeholder="Məs: 3.50">
         </div>
         <div class="modal-actions">
           <button class="cancel" id="modalCancel">Ləğv et</button>
-          <button class="confirm" id="modalConfirm">Sifarişə əlavə et</button>
+          <button class="confirm" id="modalConfirm">Əlavə et</button>
         </div>
       </div>
     </div>
   `;
   const close = ()=> root.innerHTML = '';
-  const nameInput = document.getElementById('newItemName');
-  const priceInput = document.getElementById('newItemPrice');
+  const nameInput = document.getElementById('newProductName');
+  const priceInput = document.getElementById('newProductPrice');
   document.querySelectorAll('#presetChips .preset-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       nameInput.value = chip.dataset.name;
@@ -908,7 +901,7 @@ function openAddOrderItemModal(){
     const name = nameInput.value.trim();
     const price = parseFloat(priceInput.value);
     if(!name || isNaN(price) || price < 0) return;
-    await addItemToOrder({ key: nameKey(name), name, price });
+    await push(ref(db, '/products'), { name, price });
     close();
   });
   setTimeout(()=>nameInput.focus(), 50);
