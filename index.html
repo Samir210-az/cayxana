@@ -8,8 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Çayxana">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="assets/icon-180.png">
-<link rel="icon" href="assets/icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
 <title>Çayxana · İdarəetmə</title>
 <style>
 :root{
@@ -66,27 +67,27 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
   background-position:center;
 }
 .lock-card{
-  width:100%;max-width:320px;
+  width:100%;max-width:240px;
   background:rgba(20,12,4,0.55);
   backdrop-filter:blur(14px);
   -webkit-backdrop-filter:blur(14px);
   border:1px solid var(--border2);
-  border-radius:var(--r-lg);
-  padding:36px 26px 28px;
+  border-radius:var(--r-md);
+  padding:22px 18px 18px;
   text-align:center;
   box-shadow:0 16px 48px rgba(0,0,0,0.55);
 }
-#lock h1{font-size:19px;font-weight:700;color:var(--amber-100);margin-bottom:22px}
-#lockForm{display:flex;flex-direction:column;align-items:center;gap:14px}
+#lock h1{font-size:15px;font-weight:700;color:var(--amber-100);margin-bottom:14px}
+#lockForm{display:flex;flex-direction:column;align-items:center;gap:10px}
 #pinInput{
-  width:200px;text-align:center;font-size:24px;letter-spacing:8px;
+  width:140px;text-align:center;font-size:19px;letter-spacing:6px;
   background:var(--surface);border:1.5px solid var(--border);color:var(--text);
-  border-radius:var(--r-md);padding:14px 10px;outline:none;
+  border-radius:var(--r-sm);padding:10px 8px;outline:none;
 }
 #pinInput:focus{border-color:var(--border2)}
 #lockForm button{
   background:linear-gradient(145deg,var(--amber-400),var(--amber-500));
-  color:#241608;font-weight:700;padding:12px 28px;border-radius:var(--r-md);
+  color:#241608;font-weight:700;padding:9px 22px;font-size:13.5px;border-radius:var(--r-sm);
   box-shadow:var(--shadow);
 }
 #lockMsg{color:var(--red);font-size:13px;min-height:16px}
@@ -531,10 +532,14 @@ async function initApp(){
   bindHesabat();
   bindXercler();
   bindMehsullar();
-  setupPwa();
   await ensureSeeded();
   attachRealtimeListener();
 }
+
+// PWA quraşdırma hadisəsi (beforeinstallprompt) səhifə açılan kimi, hələ
+// PIN ekranındaykən gələ bilər — ona görə bunu initApp()-un içində yox,
+// scriptin ilk işə düşməsi anında qeydə alırıq, əks halda hadisə itir.
+setupPwa();
 
 function setupPwa(){
   if('serviceWorker' in navigator){
