@@ -271,6 +271,19 @@ header.top{
 }
 @keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal h3{font-size:16px;font-weight:800;margin-bottom:16px}
+.qp-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.qp-empty{font-size:12px;color:var(--text-dim)}
+.qp-chip{display:inline-flex;align-items:stretch;background:var(--surface);border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.qp-chip-btn{padding:7px 10px;font-size:12.5px;font-weight:600;color:var(--text-dim)}
+.qp-chip-btn:active{background:var(--surface2)}
+.qp-chip-del{padding:7px 10px;font-size:13px;color:var(--red);border-left:1px solid var(--border)}
+.qp-add-row{display:flex;gap:8px;margin-bottom:18px}
+.qp-add-row input{
+  flex:1;padding:9px 12px;border-radius:var(--r-sm);font-size:13px;
+  background:var(--surface);border:1px solid var(--border);color:var(--text);outline:none;
+}
+.qp-add-row button{width:38px;border-radius:var(--r-sm);background:var(--amber-400);color:#241608;font-weight:800;font-size:16px}
+
 .field{margin-bottom:12px}
 .field label{font-size:12px;color:var(--text-dim);display:block;margin-bottom:6px}
 .field input{
@@ -459,11 +472,12 @@ const db = getDatabase(fbApp);
    DATA LAYER (Firebase Realtime Database)
    — Hər iki cihaz (sahib + administrator) eyni datanı real-vaxtda görür.
    Sxem:
-     /tables:   { "t_1": { no: 1 }, ... }
-     /products: { "p_cay": { name, price }, ... }
-     /orders:   { "t_1": { items:{ "<productKey>": {name,price,qty} }, startedAt } }  — yalnız dolu masalar
-     /sales:    { "-Nx...": { tableKey, tableNo, items, total, paidAt } }
-     /expenses: { "-Nx...": { name, amount, date } }
+     /tables:     { "t_1": { no: 1 }, ... }
+     /products:   { "p_cay": { name, price }, ... }
+     /orders:     { "t_1": { items:{ "<productKey>": {name,price,qty} }, startedAt } }  — yalnız dolu masalar
+     /sales:      { "-Nx...": { tableKey, tableNo, items, total, paidAt } }
+     /expenses:   { "-Nx...": { name, amount, date } }
+     /quickPicks: { "-Nx...": { name } }  — istifadəçinin özünün idarə etdiyi sürətli-doldurma adları
    ============================================================ */
 const rootRef = ref(db, '/');
 
@@ -475,7 +489,8 @@ function defaultData(){
     products: { p_cay: { name: 'Çay', price: 4 } },
     orders: {},
     sales: {},
-    expenses: {}
+    expenses: {},
+    quickPicks: {}
   };
 }
 
@@ -501,7 +516,8 @@ function attachRealtimeListener(){
       products: val.products || {},
       orders: val.orders || {},
       sales: val.sales || {},
-      expenses: val.expenses || {}
+      expenses: val.expenses || {},
+      quickPicks: val.quickPicks || {}
     };
     if(!appReady){ appReady = true; renderHome(); }
     else { rerenderActive(); }
@@ -1011,9 +1027,16 @@ function openAddProductModal(){
     <div class="modal-backdrop" id="modalBackdrop">
       <div class="modal">
         <h3>Yeni məhsul</h3>
+
+        <div class="qp-chips" id="qpChips"></div>
+        <div class="qp-add-row">
+          <input id="qpNewName" type="text" placeholder="Sürətli seçimə ad əlavə et (məs: Coca-Cola)">
+          <button type="button" id="qpAddBtn">+</button>
+        </div>
+
         <div class="field">
           <label>Ad</label>
-          <input id="newProductName" type="text" placeholder="Məs: Coca-Cola">
+          <input id="newProductName" type="text" placeholder="Yuxarıdan seç və ya özün yaz">
         </div>
         <div class="field">
           <label>Qiymət (₼)</label>
@@ -1027,11 +1050,53 @@ function openAddProductModal(){
       </div>
     </div>
   `;
-  const close = ()=> root.innerHTML = '';
+  const close = ()=> { unsubQuickPicks(); root.innerHTML = ''; };
   const nameInput = document.getElementById('newProductName');
   const priceInput = document.getElementById('newProductPrice');
   const addBtn = document.getElementById('addBtn');
   const rowsEl = document.getElementById('addedRows');
+  const qpChips = document.getElementById('qpChips');
+  const qpNewName = document.getElementById('qpNewName');
+
+  function renderQuickPicks(quickPicks){
+    const picks = Object.entries(quickPicks || {}).map(([key,v])=>({ key, ...v }));
+    if(picks.length === 0){
+      qpChips.innerHTML = '<span class="qp-empty">Hələ sürətli seçim yoxdur — aşağıdan əlavə et.</span>';
+      return;
+    }
+    qpChips.innerHTML = picks.map(p=>`
+      <span class="qp-chip">
+        <button type="button" class="qp-chip-btn" data-name="${p.name}">${p.name}</button>
+        <button type="button" class="qp-chip-del" data-key="${p.key}" title="Sürətli seçimdən sil">×</button>
+      </span>
+    `).join('');
+    qpChips.querySelectorAll('.qp-chip-btn').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        nameInput.value = b.dataset.name;
+        priceInput.focus();
+      });
+    });
+    qpChips.querySelectorAll('.qp-chip-del').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        try{ await remove(ref(db, '/quickPicks/' + b.dataset.key)); }
+        catch(err){ reportError(err); }
+      });
+    });
+  }
+
+  // Modal açıq olduğu müddətdə sürətli-seçim siyahısı real-vaxtda yenilənir
+  // (başqa cihazdan əlavə/silinsə də dərhal əks olunur)
+  const unsubQuickPicks = onValue(ref(db, '/quickPicks'), (snap)=> renderQuickPicks(snap.val()));
+
+  async function addQuickPick(){
+    const name = qpNewName.value.trim();
+    if(!name) return;
+    try{
+      await push(ref(db, '/quickPicks'), { name });
+      qpNewName.value = '';
+      qpNewName.focus();
+    }catch(err){ reportError(err); }
+  }
 
   function renderAdded(){
     if(added.length === 0){ rowsEl.innerHTML = ''; return; }
@@ -1065,6 +1130,9 @@ function openAddProductModal(){
       addBtn.disabled = false;
     }
   }
+
+  document.getElementById('qpAddBtn').addEventListener('click', addQuickPick);
+  qpNewName.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); addQuickPick(); } });
 
   addBtn.addEventListener('click', submitProduct);
   nameInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); priceInput.focus(); } });
