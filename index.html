@@ -148,12 +148,19 @@ header.top{
 }
 .product-btn{
   padding:14px 8px;border-radius:var(--r-md);background:var(--surface);
-  border:1px solid var(--border);text-align:center;
+  border:1px solid var(--border);text-align:center;width:100%;
 }
 .product-btn .pn{font-size:13px;font-weight:700;display:block}
 .product-btn .pp{font-size:12px;color:var(--amber-300);display:block;margin-top:3px}
 .product-btn:active{background:var(--surface2)}
 .add-product-tile{border-style:dashed;color:var(--text-dim)}
+.product-tile{position:relative}
+.product-del{
+  position:absolute;top:-7px;right:-7px;z-index:1;
+  width:22px;height:22px;border-radius:50%;
+  background:var(--red-bg);border:1px solid var(--red-bd);color:var(--red);
+  font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;
+}
 
 .order-list{margin-top:20px;display:flex;flex-direction:column;gap:8px}
 .order-line{
@@ -632,11 +639,20 @@ function renderMasa(){
   const pGrid = document.getElementById('productsGrid');
   pGrid.innerHTML = '';
   products.forEach(p=>{
-    const b = document.createElement('button');
-    b.className = 'product-btn';
-    b.innerHTML = `<span class="pn">${p.name}</span><span class="pp">${money(p.price)}</span>`;
-    b.addEventListener('click', ()=> addItemToOrder(p));
-    pGrid.appendChild(b);
+    const tile = document.createElement('div');
+    tile.className = 'product-tile';
+    tile.innerHTML = `
+      <button class="product-btn" data-key="${p.key}">
+        <span class="pn">${p.name}</span><span class="pp">${money(p.price)}</span>
+      </button>
+      <button type="button" class="product-del" data-key="${p.key}" title="Məhsulu sil">×</button>
+    `;
+    tile.querySelector('.product-btn').addEventListener('click', ()=> addItemToOrder(p));
+    tile.querySelector('.product-del').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      deleteProduct(p.key);
+    });
+    pGrid.appendChild(tile);
   });
   const addTile = document.createElement('button');
   addTile.className = 'product-btn add-product-tile';
@@ -689,6 +705,10 @@ async function addItemToOrder(product, qty = 1){
   if(!DB.orders[currentTableKey] || !DB.orders[currentTableKey].startedAt){
     await update(ref(db, `/orders/${currentTableKey}`), { startedAt: Date.now() });
   }
+}
+
+async function deleteProduct(key){
+  await remove(ref(db, '/products/' + key));
 }
 
 async function changeQty(productKey, delta){
