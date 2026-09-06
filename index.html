@@ -271,13 +271,6 @@ header.top{
 }
 @keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal h3{font-size:16px;font-weight:800;margin-bottom:16px}
-.preset-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px}
-.preset-chip{
-  padding:7px 13px;border-radius:999px;font-size:12.5px;font-weight:600;
-  background:var(--surface);border:1px solid var(--border);color:var(--text-dim);
-}
-.preset-chip:active{background:var(--surface2)}
-.preset-chip.selected{background:var(--amber-400);color:#241608;border-color:transparent}
 .field{margin-bottom:12px}
 .field label{font-size:12px;color:var(--text-dim);display:block;margin-bottom:6px}
 .field input{
@@ -1011,7 +1004,6 @@ function openAddExpenseModal(){
    cari sifarişə yazır.
    ============================================================ */
 function openAddProductModal(){
-  const PRESETS = ['Coca-Cola', 'Fanta', 'Su 0,5L', 'Su 1L', 'Su 2L', 'Şokolad', 'Mürəbbə'];
   const added = []; // bu sessiyada əlavə olunanların qısa siyahısı (yalnız məlumat üçün)
   const root = document.getElementById('modalRoot');
 
@@ -1019,12 +1011,9 @@ function openAddProductModal(){
     <div class="modal-backdrop" id="modalBackdrop">
       <div class="modal">
         <h3>Yeni məhsul</h3>
-        <div class="preset-chips" id="presetChips">
-          ${PRESETS.map(p=>`<button type="button" class="preset-chip" data-name="${p}">${p}</button>`).join('')}
-        </div>
         <div class="field">
           <label>Ad</label>
-          <input id="newProductName" type="text" placeholder="Yuxarıdan seç və ya özün yaz">
+          <input id="newProductName" type="text" placeholder="Məs: Coca-Cola">
         </div>
         <div class="field">
           <label>Qiymət (₼)</label>
@@ -1069,7 +1058,6 @@ function openAddProductModal(){
       renderAdded();
       nameInput.value = '';
       priceInput.value = '';
-      document.querySelectorAll('#presetChips .preset-chip').forEach(c=>c.classList.remove('selected'));
       nameInput.focus();
     }catch(err){
       reportError(err);
@@ -1078,13 +1066,6 @@ function openAddProductModal(){
     }
   }
 
-  document.querySelectorAll('#presetChips .preset-chip').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      nameInput.value = chip.dataset.name;
-      document.querySelectorAll('#presetChips .preset-chip').forEach(c=>c.classList.toggle('selected', c===chip));
-      priceInput.focus();
-    });
-  });
   addBtn.addEventListener('click', submitProduct);
   nameInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); priceInput.focus(); } });
   priceInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); submitProduct(); } });
