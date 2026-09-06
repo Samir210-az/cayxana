@@ -310,6 +310,9 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
   <!-- ---- HOME / SATIŞ ---- -->
   <section class="view" id="view-home">
     <div class="tables-grid" id="tablesGrid"></div>
+    <div class="section-actions">
+      <button class="ghost-btn" id="btnAddProduct">+ Məhsul əlavə et</button>
+    </div>
   </section>
 
   <!-- ---- MASA / SİFARİŞ ---- -->
@@ -493,6 +496,7 @@ function rerenderActive(){
    ============================================================ */
 async function initApp(){
   bindNav();
+  bindHome();
   bindMasa();
   bindHesabat();
   bindXercler();
@@ -615,6 +619,10 @@ async function addTable(){
   await set(ref(db, '/tables/t_' + nextNo), { no: nextNo });
 }
 
+function bindHome(){
+  document.getElementById('btnAddProduct').addEventListener('click', ()=> openAddProductModal(false));
+}
+
 /* ============================================================
    MASA / SİFARİŞ EKRANI
    ============================================================ */
@@ -629,13 +637,25 @@ function openMasa(tableKey){
   switchView('masa');
 }
 
+let lastProductsSignature = null;
+
 function renderMasa(){
   const table = DB.tables[currentTableKey];
   if(!table){ renderHome(); switchView('home'); return; }
   document.getElementById('masaTitle').textContent = 'Masa ' + table.no;
+  renderProductsGridIfChanged();
+  renderOrderSection();
+}
 
-  // Məhsullar
+// Məhsul kartları YALNIZ kataloq faktiki dəyişəndə (yeni əlavə/silmə) yenidən qurulur.
+// Sifariş dəyişikliklərində (qty artımı və s.) toxunulmur — sürətli ardıcıl
+// vurmalarda "kart barmaq altında yenidən qurulub toxunma itir" problemini önləyir.
+function renderProductsGridIfChanged(){
   const products = Object.entries(DB.products).map(([key,v])=>({ key, ...v }));
+  const signature = JSON.stringify(products);
+  if(signature === lastProductsSignature) return;
+  lastProductsSignature = signature;
+
   const pGrid = document.getElementById('productsGrid');
   pGrid.innerHTML = '';
   products.forEach(p=>{
@@ -657,10 +677,11 @@ function renderMasa(){
   const addTile = document.createElement('button');
   addTile.className = 'product-btn add-product-tile';
   addTile.innerHTML = '<span class="pn">+ Yeni</span>';
-  addTile.addEventListener('click', openAddProductModal);
+  addTile.addEventListener('click', ()=> openAddProductModal(true));
   pGrid.appendChild(addTile);
+}
 
-  // Sifariş sətirləri
+function renderOrderSection(){
   const order = DB.orders[currentTableKey];
   const items = order && order.items
     ? Object.entries(order.items).map(([key,v])=>({ productKey: key, ...v }))
@@ -883,7 +904,7 @@ function openAddExpenseModal(){
    əlavə et" ilə hamısını bir dəfəyə həm daimi kataloqa, həm də
    cari sifarişə yazır.
    ============================================================ */
-function openAddProductModal(){
+function openAddProductModal(addToOrder = true){
   const PRESETS = ['Coca-Cola', 'Fanta', 'Su 0,5L', 'Su 1L', 'Su 2L', 'Şokolad', 'Mürəbbə'];
   let pending = []; // { name, price, qty }
   const root = document.getElementById('modalRoot');
@@ -981,7 +1002,9 @@ function openAddProductModal(){
     for(const it of pending){
       const productRef = push(ref(db, '/products'));
       await set(productRef, { name: it.name, price: it.price });
-      await addItemToOrder({ key: productRef.key, name: it.name, price: it.price }, it.qty);
+      if(addToOrder && currentTableKey){
+        await addItemToOrder({ key: productRef.key, name: it.name, price: it.price }, it.qty);
+      }
     }
     close();
   });
