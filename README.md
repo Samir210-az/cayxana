@@ -1,22 +1,25 @@
 # Çayxana — İdarəetmə Paneli
 
-Tək-adminli çayxana/kafe idarəetmə paneli. Stollar üzrə sifariş qəbulu, ödəniş izlənməsi və gün/həftə/ay hesabatları.
+Çayxana/kafe idarəetmə paneli. Stollar üzrə sifariş qəbulu, ödəniş izlənməsi, xərclər və gün/həftə/ay/ümumi hesabatlar. Sahib və administrator eyni hüquqla, eyni ortaq PIN ilə, fərqli cihazlardan real-vaxt sinxron işləyir.
 
 ## Texniki qeydlər
 
-- Saf HTML/CSS/JS (framework yoxdur), bütün data brauzerin `localStorage`-ində saxlanılır — server/backend tələb olunmur.
-- **Tək cihaz üçün nəzərdə tutulub.** localStorage brauzerə/cihaza bağlıdır: başqa telefon/kompüterdən açsan ayrı data görünər, cihaz/brauzer keşi silinsə data itər. Əgər gələcəkdə bir neçə cihazdan paralel giriş və ya data itkisinə qarşı qorunma lazım olsa, backend (Firebase RTDB) əlavə edilə bilər — hazırkı MVP bunu tələb etməyib.
-- Giriş: tək admin PIN-i ilə (defolt: `2026`, kодда SHA-256 hash şəklində saxlanılır — dəyişmək üçün `index.html`-də `PIN_HASH` sabitini yeni PIN-in SHA-256 hash-i ilə əvəz et).
-- İlkin data: 10 stol, 1 məhsul (Çay — 4 ₼). Admin panelin özündən yeni stol və məhsul əlavə etmək mümkündür.
-- Deploy: Vercel (statik sayt, build addımı yoxdur, kök qovluqda `index.html` kifayətdir).
+- Saf HTML/CSS/JS (framework yoxdur, build addımı yoxdur) + **Firebase Realtime Database** (layihə: `cayxana`, region: europe-west1).
+- Giriş: tək ortaq PIN (defolt: `2026`, kodda SHA-256 hash şəklində saxlanılır — dəyişmək üçün `index.html`-də `PIN_HASH` sabitini yeni PIN-in SHA-256 hash-i ilə əvəz et). PIN yoxlaması Firebase Authentication deyil, sadəcə koddaxili yoxlamadır.
+- Data bütün cihazlar arasında real-vaxtda sinxrondur (Firebase `onValue` listener) — bir cihazda edilən dəyişiklik digərində dərhal görünür.
+- İlkin data: 10 stol, 1 məhsul (Çay — 4 ₼). Panelin özündən yeni stol və məhsul əlavə etmək mümkündür.
+- Deploy: Vercel (statik sayt, build addımı yoxdur) — canlı domen: cayxana-az.vercel.app
 
-## Data strukturu (localStorage, açar: `cayxana_v1`)
+## Firebase RTDB sxemi
 
 ```
-{
-  tables:  [{ id, no }],
-  products:[{ id, name, price }],
-  orders:  { [tableId]: { items:[{productId,name,price,qty}], startedAt } },
-  sales:   [{ id, tableId, tableNo, items, total, paidAt }]
-}
+/tables:   { "t_1": { no: 1 }, ... }
+/products: { "p_cay": { name: "Çay", price: 4 }, ... }
+/orders:   { "t_1": { items:[{productId,name,price,qty}], startedAt } }   — yalnız dolu masalar üçün
+/sales:    { "<push-key>": { tableKey, tableNo, items, total, paidAt } }
+/expenses: { "<push-key>": { name, amount, date } }
 ```
+
+## Təhlükəsizlik qaydası (Rules)
+
+PIN girişi Firebase Authentication istifadə etmədiyi üçün RTDB Rules-da `auth != null` şərti işləməz. Sadə açıq qayda tətbiq olunur (bax: repo sahibinə göndərilən qeyd) — qorunma tam olaraq client-side PIN ekranına əsaslanır.
