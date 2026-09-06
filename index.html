@@ -244,6 +244,7 @@ header.top{
   width:100%;max-width:420px;background:var(--bg2);border:1px solid var(--border);
   border-radius:20px 20px 0 0;padding:22px 20px calc(env(safe-area-inset-bottom) + 22px);
   animation:sheet-up .25s var(--ease);
+  max-height:88vh;overflow-y:auto;
 }
 @keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .modal h3{font-size:16px;font-weight:800;margin-bottom:16px}
@@ -679,11 +680,11 @@ function renderMasa(){
   document.getElementById('btnPay').disabled = items.length === 0;
 }
 
-async function addItemToOrder(product){
+async function addItemToOrder(product, qty = 1){
   const itemRef = ref(db, `/orders/${currentTableKey}/items/${product.key}`);
   await runTransaction(itemRef, (current)=>{
-    if(current) return { name: current.name, price: current.price, qty: current.qty + 1 };
-    return { name: product.name, price: product.price, qty: 1 };
+    if(current) return { name: current.name, price: current.price, qty: current.qty + qty };
+    return { name: product.name, price: product.price, qty };
   });
   if(!DB.orders[currentTableKey] || !DB.orders[currentTableKey].startedAt){
     await update(ref(db, `/orders/${currentTableKey}`), { startedAt: Date.now() });
@@ -857,16 +858,20 @@ function openAddExpenseModal(){
 }
 
 /* ============================================================
-   MODAL — Yeni məhsul (daimi kataloqa yazılır — bir dəfə əlavə
-   edildikdən sonra bütün masalarda daim görünür)
+   MODAL — Yeni məhsul(lar) (toplu əlavə)
+   Bir neçə məhsulu (ad+qiymət+say) siyahıya yığıb, "Sifarişə
+   əlavə et" ilə hamısını bir dəfəyə həm daimi kataloqa, həm də
+   cari sifarişə yazır.
    ============================================================ */
 function openAddProductModal(){
   const PRESETS = ['Coca-Cola', 'Fanta', 'Su 0,5L', 'Su 1L', 'Su 2L', 'Şokolad', 'Mürəbbə'];
+  let pending = []; // { name, price, qty }
   const root = document.getElementById('modalRoot');
+
   root.innerHTML = `
     <div class="modal-backdrop" id="modalBackdrop">
       <div class="modal">
-        <h3>Yeni məhsul</h3>
+        <h3>Məhsul(lar) əlavə et</h3>
         <div class="preset-chips" id="presetChips">
           ${PRESETS.map(p=>`<button type="button" class="preset-chip" data-name="${p}">${p}</button>`).join('')}
         </div>
@@ -878,9 +883,11 @@ function openAddProductModal(){
           <label>Qiymət (₼)</label>
           <input id="newProductPrice" type="number" step="0.01" min="0" placeholder="Məs: 3.50">
         </div>
+        <button type="button" class="ghost-btn" id="addRowBtn" style="margin-bottom:14px">+ Siyahıya əlavə et</button>
+        <div class="order-list" id="pendingRows"></div>
         <div class="modal-actions">
           <button class="cancel" id="modalCancel">Ləğv et</button>
-          <button class="confirm" id="modalConfirm">Əlavə et</button>
+          <button class="confirm" id="modalConfirm" disabled>Sifarişə əlavə et</button>
         </div>
       </div>
     </div>
@@ -888,6 +895,54 @@ function openAddProductModal(){
   const close = ()=> root.innerHTML = '';
   const nameInput = document.getElementById('newProductName');
   const priceInput = document.getElementById('newProductPrice');
+  const confirmBtn = document.getElementById('modalConfirm');
+  const rowsEl = document.getElementById('pendingRows');
+
+  function renderRows(){
+    if(pending.length === 0){
+      rowsEl.innerHTML = '';
+      confirmBtn.disabled = true;
+      return;
+    }
+    confirmBtn.disabled = false;
+    rowsEl.innerHTML = pending.map((it,i)=>`
+      <div class="order-line">
+        <div>
+          <span class="nm">${it.name}</span><br>
+          <span class="sub">${money(it.price)} / ədəd</span>
+        </div>
+        <div class="qty-ctrl">
+          <button type="button" data-act="dec" data-i="${i}">−</button>
+          <span>${it.qty}</span>
+          <button type="button" data-act="inc" data-i="${i}">+</button>
+        </div>
+        <div class="line-total">${money(it.price*it.qty)}</div>
+      </div>
+    `).join('');
+    rowsEl.querySelectorAll('[data-act]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const i = Number(btn.dataset.i);
+        pending[i].qty += (btn.dataset.act === 'inc' ? 1 : -1);
+        if(pending[i].qty <= 0) pending.splice(i,1);
+        renderRows();
+      });
+    });
+  }
+
+  function addToPending(){
+    const name = nameInput.value.trim();
+    const price = parseFloat(priceInput.value);
+    if(!name || isNaN(price) || price < 0) return;
+    const existing = pending.find(it=>it.name.toLowerCase() === name.toLowerCase());
+    if(existing){ existing.qty += 1; }
+    else{ pending.push({ name, price, qty: 1 }); }
+    nameInput.value = '';
+    priceInput.value = '';
+    document.querySelectorAll('#presetChips .preset-chip').forEach(c=>c.classList.remove('selected'));
+    nameInput.focus();
+    renderRows();
+  }
+
   document.querySelectorAll('#presetChips .preset-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       nameInput.value = chip.dataset.name;
@@ -895,13 +950,19 @@ function openAddProductModal(){
       priceInput.focus();
     });
   });
+  document.getElementById('addRowBtn').addEventListener('click', addToPending);
+  priceInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); addToPending(); } });
+
   document.getElementById('modalBackdrop').addEventListener('click', (e)=>{ if(e.target.id==='modalBackdrop') close(); });
   document.getElementById('modalCancel').addEventListener('click', close);
-  document.getElementById('modalConfirm').addEventListener('click', async ()=>{
-    const name = nameInput.value.trim();
-    const price = parseFloat(priceInput.value);
-    if(!name || isNaN(price) || price < 0) return;
-    await push(ref(db, '/products'), { name, price });
+  confirmBtn.addEventListener('click', async ()=>{
+    if(pending.length === 0) return;
+    confirmBtn.disabled = true;
+    for(const it of pending){
+      const productRef = push(ref(db, '/products'));
+      await set(productRef, { name: it.name, price: it.price });
+      await addItemToOrder({ key: productRef.key, name: it.name, price: it.price }, it.qty);
+    }
     close();
   });
   setTimeout(()=>nameInput.focus(), 50);
