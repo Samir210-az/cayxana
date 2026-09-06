@@ -364,7 +364,7 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getDatabase, ref, onValue, get, set, update, remove, push
+  getDatabase, ref, onValue, get, set, update, remove, push, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 /* ============================================================
@@ -421,7 +421,7 @@ const db = getDatabase(fbApp);
    Sxem:
      /tables:   { "t_1": { no: 1 }, ... }
      /products: { "p_cay": { name, price }, ... }
-     /orders:   { "t_1": { items:[{productId,name,price,qty}], startedAt } }  — yalnız dolu masalar
+     /orders:   { "t_1": { items:{ "<productKey>": {name,price,qty} }, startedAt } }  — yalnız dolu masalar
      /sales:    { "-Nx...": { tableKey, tableNo, items, total, paidAt } }
      /expenses: { "-Nx...": { name, amount, date } }
    ============================================================ */
@@ -516,8 +516,8 @@ function money(n){
   return (Math.round(n*100)/100).toString().replace(/\.0$/,'') + ' ₼';
 }
 function orderTotal(order){
-  if(!order) return 0;
-  return order.items.reduce((s,it)=>s+it.price*it.qty, 0);
+  if(!order || !order.items) return 0;
+  return Object.values(order.items).reduce((s,it)=>s+it.price*it.qty, 0);
 }
 function isSameDay(ts, ref){
   const a = new Date(ts), b = new Date(ref);
@@ -578,7 +578,7 @@ function renderHome(){
 
   tables.forEach(t=>{
     const order = DB.orders[t.key];
-    const dolu = !!order && order.items && order.items.length > 0;
+    const dolu = !!(order && order.items && Object.keys(order.items).length > 0);
     const card = document.createElement('button');
     card.className = 'table-card ' + (dolu ? 'dolu' : 'boş');
     card.innerHTML = `
@@ -646,12 +646,15 @@ function renderMasa(){
 
   // Sifariş sətirləri
   const order = DB.orders[currentTableKey];
+  const items = order && order.items
+    ? Object.entries(order.items).map(([key,v])=>({ productKey: key, ...v }))
+    : [];
   const list = document.getElementById('orderList');
   list.innerHTML = '';
-  if(!order || !order.items || order.items.length === 0){
+  if(items.length === 0){
     list.innerHTML = '<div class="empty-note">Hələ sifariş yoxdur — yuxarıdan məhsul seç.</div>';
   } else {
-    order.items.forEach((it, idx)=>{
+    items.forEach(it=>{
       const row = document.createElement('div');
       row.className = 'order-line';
       row.innerHTML = `
@@ -666,48 +669,52 @@ function renderMasa(){
         </div>
         <div class="line-total">${money(it.price*it.qty)}</div>
       `;
-      row.querySelector('[data-act="inc"]').addEventListener('click', ()=> changeQty(idx, 1));
-      row.querySelector('[data-act="dec"]').addEventListener('click', ()=> changeQty(idx, -1));
+      row.querySelector('[data-act="inc"]').addEventListener('click', ()=> changeQty(it.productKey, 1));
+      row.querySelector('[data-act="dec"]').addEventListener('click', ()=> changeQty(it.productKey, -1));
       list.appendChild(row);
     });
   }
 
   const total = orderTotal(order);
   document.getElementById('masaTotal').textContent = money(total);
-  document.getElementById('btnPay').disabled = !(order && order.items && order.items.length > 0);
+  document.getElementById('btnPay').disabled = items.length === 0;
 }
 
 async function addItemToOrder(product){
-  const order = DB.orders[currentTableKey] || { items: [], startedAt: Date.now() };
-  const items = [...order.items];
-  const existing = items.find(it=>it.productId===product.key);
-  if(existing){ existing.qty += 1; }
-  else{ items.push({ productId: product.key, name: product.name, price: product.price, qty: 1 }); }
-  await set(ref(db, '/orders/' + currentTableKey), { items, startedAt: order.startedAt || Date.now() });
+  const itemRef = ref(db, `/orders/${currentTableKey}/items/${product.key}`);
+  await runTransaction(itemRef, (current)=>{
+    if(current) return { name: current.name, price: current.price, qty: current.qty + 1 };
+    return { name: product.name, price: product.price, qty: 1 };
+  });
+  if(!DB.orders[currentTableKey] || !DB.orders[currentTableKey].startedAt){
+    await update(ref(db, `/orders/${currentTableKey}`), { startedAt: Date.now() });
+  }
 }
 
-async function changeQty(idx, delta){
-  const order = DB.orders[currentTableKey];
-  if(!order) return;
-  const items = [...order.items];
-  items[idx] = { ...items[idx], qty: items[idx].qty + delta };
-  if(items[idx].qty <= 0) items.splice(idx,1);
-  if(items.length === 0){
-    await remove(ref(db, '/orders/' + currentTableKey));
-  } else {
-    await set(ref(db, '/orders/' + currentTableKey), { items, startedAt: order.startedAt });
+async function changeQty(productKey, delta){
+  const itemRef = ref(db, `/orders/${currentTableKey}/items/${productKey}`);
+  await runTransaction(itemRef, (current)=>{
+    if(!current) return current;
+    const newQty = current.qty + delta;
+    if(newQty <= 0) return null; // node silinir
+    return { name: current.name, price: current.price, qty: newQty };
+  });
+  const itemsSnap = await get(ref(db, `/orders/${currentTableKey}/items`));
+  if(!itemsSnap.exists()){
+    await remove(ref(db, `/orders/${currentTableKey}`));
   }
 }
 
 async function markPaid(){
   const order = DB.orders[currentTableKey];
-  if(!order || !order.items || order.items.length===0) return;
+  if(!order || !order.items || Object.keys(order.items).length===0) return;
   const table = DB.tables[currentTableKey];
+  const itemsArr = Object.values(order.items);
   const saleRef = push(ref(db, '/sales'));
   await set(saleRef, {
     tableKey: currentTableKey,
     tableNo: table.no,
-    items: order.items,
+    items: itemsArr,
     total: orderTotal(order),
     paidAt: Date.now()
   });
