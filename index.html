@@ -77,15 +77,16 @@ header.top{
   background:linear-gradient(180deg,var(--bg2) 70%,transparent);
   padding:18px 0 12px;
 }
-.top-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.top-row{display:flex;flex-direction:column;gap:12px}
 .brand{display:flex;align-items:center;gap:10px}
 .brand .cup{font-size:26px}
 .brand h1{font-size:18px;font-weight:800;color:var(--amber-100)}
-.nav-btns{display:flex;gap:8px}
+.nav-btns{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
 .nav-btn{
-  padding:8px 14px;border-radius:var(--r-sm);
+  flex:0 0 auto;white-space:nowrap;
+  padding:7px 12px;border-radius:var(--r-sm);
   background:var(--surface);border:1px solid var(--border);
-  color:var(--text-dim);font-size:13px;font-weight:600;
+  color:var(--text-dim);font-size:12.5px;font-weight:600;
   transition:background .15s var(--ease),color .15s var(--ease);
 }
 .nav-btn.active{background:var(--amber-400);color:#241608;border-color:transparent}
@@ -154,13 +155,6 @@ header.top{
 .product-btn .pp{font-size:12px;color:var(--amber-300);display:block;margin-top:3px}
 .product-btn:active{background:var(--surface2)}
 .add-product-tile{border-style:dashed;color:var(--text-dim)}
-.product-tile{position:relative}
-.product-del{
-  position:absolute;top:-7px;right:-7px;z-index:1;
-  width:22px;height:22px;border-radius:50%;
-  background:var(--red-bg);border:1px solid var(--red-bd);color:var(--red);
-  font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;
-}
 
 .order-list{margin-top:20px;display:flex;flex-direction:column;gap:8px}
 .order-line{
@@ -299,6 +293,7 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
         <button class="nav-btn" data-nav="home">Stollar</button>
         <button class="nav-btn" data-nav="hesabat">Hesabat</button>
         <button class="nav-btn" data-nav="xercler">Xərclər</button>
+        <button class="nav-btn" data-nav="mehsullar">Məhsullar</button>
       </div>
     </div>
     <div class="sales-banner">
@@ -310,9 +305,6 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
   <!-- ---- HOME / SATIŞ ---- -->
   <section class="view" id="view-home">
     <div class="tables-grid" id="tablesGrid"></div>
-    <div class="section-actions">
-      <button class="ghost-btn" id="btnAddProduct">+ Məhsul əlavə et</button>
-    </div>
   </section>
 
   <!-- ---- MASA / SİFARİŞ ---- -->
@@ -368,6 +360,14 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
       <button class="ghost-btn" id="btnAddExpense">+ Xərc əlavə et</button>
     </div>
     <div class="expense-list" id="expenseList"></div>
+  </section>
+
+  <!-- ---- MƏHSULLAR ---- -->
+  <section class="view" id="view-mehsullar">
+    <div class="section-actions">
+      <button class="ghost-btn" id="btnAddProductPage">+ Məhsul əlavə et</button>
+    </div>
+    <div class="expense-list" id="productsList"></div>
   </section>
 
   <footer>Çayxana idarəetmə paneli</footer>
@@ -489,6 +489,7 @@ function rerenderActive(){
   if(active.id === 'view-masa' && currentTableKey) renderMasa();
   if(active.id === 'view-hesabat') renderHesabat();
   if(active.id === 'view-xercler') renderXercler();
+  if(active.id === 'view-mehsullar') renderMehsullar();
 }
 
 /* ============================================================
@@ -496,10 +497,10 @@ function rerenderActive(){
    ============================================================ */
 async function initApp(){
   bindNav();
-  bindHome();
   bindMasa();
   bindHesabat();
   bindXercler();
+  bindMehsullar();
   await ensureSeeded();
   attachRealtimeListener();
 }
@@ -519,6 +520,7 @@ function bindNav(){
       if(target === 'hesabat') renderHesabat();
       if(target === 'home') renderHome();
       if(target === 'xercler') renderXercler();
+      if(target === 'mehsullar') renderMehsullar();
       switchView(target);
     });
   });
@@ -619,10 +621,6 @@ async function addTable(){
   await set(ref(db, '/tables/t_' + nextNo), { no: nextNo });
 }
 
-function bindHome(){
-  document.getElementById('btnAddProduct').addEventListener('click', ()=> openAddProductModal(false));
-}
-
 /* ============================================================
    MASA / SİFARİŞ EKRANI
    ============================================================ */
@@ -659,20 +657,11 @@ function renderProductsGridIfChanged(){
   const pGrid = document.getElementById('productsGrid');
   pGrid.innerHTML = '';
   products.forEach(p=>{
-    const tile = document.createElement('div');
-    tile.className = 'product-tile';
-    tile.innerHTML = `
-      <button class="product-btn" data-key="${p.key}">
-        <span class="pn">${p.name}</span><span class="pp">${money(p.price)}</span>
-      </button>
-      <button type="button" class="product-del" data-key="${p.key}" title="Məhsulu sil">×</button>
-    `;
-    tile.querySelector('.product-btn').addEventListener('click', ()=> addItemToOrder(p));
-    tile.querySelector('.product-del').addEventListener('click', (e)=>{
-      e.stopPropagation();
-      deleteProduct(p.key);
-    });
-    pGrid.appendChild(tile);
+    const b = document.createElement('button');
+    b.className = 'product-btn';
+    b.innerHTML = `<span class="pn">${p.name}</span><span class="pp">${money(p.price)}</span>`;
+    b.addEventListener('click', ()=> addItemToOrder(p));
+    pGrid.appendChild(b);
   });
   const addTile = document.createElement('button');
   addTile.className = 'product-btn add-product-tile';
@@ -855,6 +844,36 @@ function renderXercler(){
 
 async function deleteExpense(key){
   await remove(ref(db, '/expenses/' + key));
+}
+
+/* ============================================================
+   MƏHSULLAR (kataloq idarəetməsi — əlavə/silmə yalnız burda)
+   ============================================================ */
+function bindMehsullar(){
+  document.getElementById('btnAddProductPage').addEventListener('click', ()=> openAddProductModal(false));
+}
+
+function renderMehsullar(){
+  const products = Object.entries(DB.products).map(([key,v])=>({ key, ...v }));
+  const list = document.getElementById('productsList');
+  list.innerHTML = '';
+  if(products.length === 0){
+    list.innerHTML = '<div class="empty-note">Hələ məhsul əlavə edilməyib.</div>';
+    return;
+  }
+  products.forEach(p=>{
+    const row = document.createElement('div');
+    row.className = 'expense-row';
+    row.innerHTML = `
+      <div>
+        <div class="nm">${p.name}</div>
+        <div class="dt">${money(p.price)}</div>
+      </div>
+      <button class="del" data-key="${p.key}" title="Sil">×</button>
+    `;
+    row.querySelector('.del').addEventListener('click', ()=> deleteProduct(p.key));
+    list.appendChild(row);
+  });
 }
 
 function openAddExpenseModal(){
