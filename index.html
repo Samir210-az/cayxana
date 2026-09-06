@@ -361,7 +361,27 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
 <!-- ================= MODALS (JS ilə göstərilir) ================= -->
 <div id="modalRoot"></div>
 
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getDatabase, ref, onValue, get, set, update, remove, push
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+/* ============================================================
+   FIREBASE
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyB0RQZ5TjfmrY-amOc-BJUTyiHrnI5Y05s",
+  authDomain: "cayxana.firebaseapp.com",
+  databaseURL: "https://cayxana-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "cayxana",
+  storageBucket: "cayxana.firebasestorage.app",
+  messagingSenderId: "907168802351",
+  appId: "1:907168802351:web:68bd2115f96eddc7fdc8da"
+};
+const fbApp = initializeApp(firebaseConfig);
+const db = getDatabase(fbApp);
+
 /* ============================================================
    PIN GİRİŞİ
    ============================================================ */
@@ -396,49 +416,77 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
 })();
 
 /* ============================================================
-   DATA LAYER (localStorage)
+   DATA LAYER (Firebase Realtime Database)
+   — Hər iki cihaz (sahib + administrator) eyni datanı real-vaxtda görür.
+   Sxem:
+     /tables:   { "t_1": { no: 1 }, ... }
+     /products: { "p_cay": { name, price }, ... }
+     /orders:   { "t_1": { items:[{productId,name,price,qty}], startedAt } }  — yalnız dolu masalar
+     /sales:    { "-Nx...": { tableKey, tableNo, items, total, paidAt } }
+     /expenses: { "-Nx...": { name, amount, date } }
    ============================================================ */
-const STORAGE_KEY = 'cayxana_v1';
+const rootRef = ref(db, '/');
 
-function loadData(){
-  let data;
-  try{ data = JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ data = null; }
-  if(!data){
-    data = {
-      tables: Array.from({length:10}, (_,i)=>({ id: i+1, no: i+1 })),
-      products: [ { id: 'p_cay', name: 'Çay', price: 4 } ],
-      orders: {},   // { [tableId]: { items:[{productId,name,price,qty}], startedAt } }
-      sales: [],    // { id, tableId, tableNo, items, total, paidAt }
-      expenses: []  // { id, name, amount, date }
-    };
-    saveData(data);
-  }
-  // köhnə versiyalarla uyğunluq üçün sahələri təmin et
-  data.orders = data.orders || {};
-  data.sales = data.sales || [];
-  data.products = data.products || [];
-  data.expenses = data.expenses || [];
-  return data;
-}
-function saveData(data){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function defaultData(){
+  const tables = {};
+  for(let i=1;i<=10;i++) tables['t_'+i] = { no: i };
+  return {
+    tables,
+    products: { p_cay: { name: 'Çay', price: 4 } },
+    orders: {},
+    sales: {},
+    expenses: {}
+  };
 }
 
 let DB = null;
-let currentTableId = null;
+let currentTableKey = null;
 let currentPeriod = 'day';
+let appReady = false;
+
+async function ensureSeeded(){
+  const snap = await get(rootRef);
+  if(!snap.exists()){
+    await set(rootRef, defaultData());
+  }
+}
+
+function attachRealtimeListener(){
+  onValue(rootRef, (snap)=>{
+    const val = snap.val() || {};
+    DB = {
+      tables: val.tables || {},
+      products: val.products || {},
+      orders: val.orders || {},
+      sales: val.sales || {},
+      expenses: val.expenses || {}
+    };
+    if(!appReady){ appReady = true; renderHome(); }
+    else { rerenderActive(); }
+  });
+}
+
+function rerenderActive(){
+  updateSalesBanner();
+  const active = document.querySelector('.view.active');
+  if(!active) return;
+  if(active.id === 'view-home') renderHome();
+  if(active.id === 'view-masa' && currentTableKey) renderMasa();
+  if(active.id === 'view-hesabat') renderHesabat();
+  if(active.id === 'view-xercler') renderXercler();
+}
 
 /* ============================================================
    APP INIT
    ============================================================ */
-function initApp(){
-  DB = loadData();
+async function initApp(){
   bindNav();
   bindHome();
   bindMasa();
   bindHesabat();
   bindXercler();
-  renderHome();
+  await ensureSeeded();
+  attachRealtimeListener();
 }
 
 function switchView(name){
@@ -486,9 +534,15 @@ function startOfMonth(ref){
   const d = new Date(ref);
   return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
 }
+function salesArray(){
+  return Object.entries(DB.sales).map(([key,v])=>({ key, ...v }));
+}
+function expensesArray(){
+  return Object.entries(DB.expenses).map(([key,v])=>({ key, ...v }));
+}
 function salesInPeriod(period){
   const now = Date.now();
-  return DB.sales.filter(s=>{
+  return salesArray().filter(s=>{
     if(period==='day') return isSameDay(s.paidAt, now);
     if(period==='week') return s.paidAt >= startOfWeek(now);
     if(period==='month') return s.paidAt >= startOfMonth(now);
@@ -497,7 +551,7 @@ function salesInPeriod(period){
 }
 function expensesInPeriod(period){
   const now = Date.now();
-  return DB.expenses.filter(e=>{
+  return expensesArray().filter(e=>{
     if(period==='day') return isSameDay(e.date, now);
     if(period==='week') return e.date >= startOfWeek(now);
     if(period==='month') return e.date >= startOfMonth(now);
@@ -505,19 +559,26 @@ function expensesInPeriod(period){
   });
 }
 
+function updateSalesBanner(){
+  const todayTotal = salesInPeriod('day').reduce((s,r)=>s+r.total,0);
+  document.getElementById('todaySales').textContent = money(todayTotal);
+}
+
 /* ============================================================
    ANA SƏHİFƏ (SATIŞ) — STOLLAR
    ============================================================ */
 function renderHome(){
-  // header - bugünkü satış
-  const todayTotal = salesInPeriod('day').reduce((s,r)=>s+r.total,0);
-  document.getElementById('todaySales').textContent = money(todayTotal);
+  updateSalesBanner();
 
   const grid = document.getElementById('tablesGrid');
   grid.innerHTML = '';
-  DB.tables.forEach(t=>{
-    const order = DB.orders[t.id];
-    const dolu = !!order && order.items.length > 0;
+  const tables = Object.entries(DB.tables)
+    .map(([key,v])=>({ key, ...v }))
+    .sort((a,b)=>a.no-b.no);
+
+  tables.forEach(t=>{
+    const order = DB.orders[t.key];
+    const dolu = !!order && order.items && order.items.length > 0;
     const card = document.createElement('button');
     card.className = 'table-card ' + (dolu ? 'dolu' : 'boş');
     card.innerHTML = `
@@ -525,7 +586,7 @@ function renderHome(){
       <span class="st">${dolu ? 'Dolu' : 'Boş'}</span>
       ${dolu ? `<span class="amt">${money(orderTotal(order))}</span>` : ''}
     `;
-    card.addEventListener('click', ()=> openMasa(t.id));
+    card.addEventListener('click', ()=> openMasa(t.key));
     grid.appendChild(card);
   });
 
@@ -537,12 +598,10 @@ function renderHome(){
   grid.appendChild(addBtn);
 }
 
-function addTable(){
-  const nextNo = DB.tables.length ? Math.max(...DB.tables.map(t=>t.no)) + 1 : 1;
-  const id = DB.tables.length ? Math.max(...DB.tables.map(t=>t.id)) + 1 : 1;
-  DB.tables.push({ id, no: nextNo });
-  saveData(DB);
-  renderHome();
+async function addTable(){
+  const nos = Object.values(DB.tables).map(t=>t.no);
+  const nextNo = nos.length ? Math.max(...nos) + 1 : 1;
+  await set(ref(db, '/tables/t_' + nextNo), { no: nextNo });
 }
 
 /* ============================================================
@@ -557,20 +616,22 @@ function bindMasa(){
   document.getElementById('btnPay').addEventListener('click', markPaid);
 }
 
-function openMasa(tableId){
-  currentTableId = tableId;
+function openMasa(tableKey){
+  currentTableKey = tableKey;
   renderMasa();
   switchView('masa');
 }
 
 function renderMasa(){
-  const table = DB.tables.find(t=>t.id===currentTableId);
+  const table = DB.tables[currentTableKey];
+  if(!table){ renderHome(); switchView('home'); return; }
   document.getElementById('masaTitle').textContent = 'Masa ' + table.no;
 
   // Məhsullar
+  const products = Object.entries(DB.products).map(([key,v])=>({ key, ...v }));
   const pGrid = document.getElementById('productsGrid');
   pGrid.innerHTML = '';
-  DB.products.forEach(p=>{
+  products.forEach(p=>{
     const b = document.createElement('button');
     b.className = 'product-btn';
     b.innerHTML = `<span class="pn">${p.name}</span><span class="pp">${money(p.price)}</span>`;
@@ -584,10 +645,10 @@ function renderMasa(){
   pGrid.appendChild(addTile);
 
   // Sifariş sətirləri
-  const order = DB.orders[currentTableId];
+  const order = DB.orders[currentTableKey];
   const list = document.getElementById('orderList');
   list.innerHTML = '';
-  if(!order || order.items.length === 0){
+  if(!order || !order.items || order.items.length === 0){
     list.innerHTML = '<div class="empty-note">Hələ sifariş yoxdur — yuxarıdan məhsul seç.</div>';
   } else {
     order.items.forEach((it, idx)=>{
@@ -613,44 +674,44 @@ function renderMasa(){
 
   const total = orderTotal(order);
   document.getElementById('masaTotal').textContent = money(total);
-  document.getElementById('btnPay').disabled = !(order && order.items.length > 0);
+  document.getElementById('btnPay').disabled = !(order && order.items && order.items.length > 0);
 }
 
-function addItemToOrder(product){
-  if(!DB.orders[currentTableId]){
-    DB.orders[currentTableId] = { items: [], startedAt: Date.now() };
-  }
-  const order = DB.orders[currentTableId];
-  const existing = order.items.find(it=>it.productId===product.id);
+async function addItemToOrder(product){
+  const order = DB.orders[currentTableKey] || { items: [], startedAt: Date.now() };
+  const items = [...order.items];
+  const existing = items.find(it=>it.productId===product.key);
   if(existing){ existing.qty += 1; }
-  else{ order.items.push({ productId: product.id, name: product.name, price: product.price, qty: 1 }); }
-  saveData(DB);
-  renderMasa();
+  else{ items.push({ productId: product.key, name: product.name, price: product.price, qty: 1 }); }
+  await set(ref(db, '/orders/' + currentTableKey), { items, startedAt: order.startedAt || Date.now() });
 }
 
-function changeQty(idx, delta){
-  const order = DB.orders[currentTableId];
-  order.items[idx].qty += delta;
-  if(order.items[idx].qty <= 0) order.items.splice(idx,1);
-  if(order.items.length === 0) delete DB.orders[currentTableId];
-  saveData(DB);
-  renderMasa();
+async function changeQty(idx, delta){
+  const order = DB.orders[currentTableKey];
+  if(!order) return;
+  const items = [...order.items];
+  items[idx] = { ...items[idx], qty: items[idx].qty + delta };
+  if(items[idx].qty <= 0) items.splice(idx,1);
+  if(items.length === 0){
+    await remove(ref(db, '/orders/' + currentTableKey));
+  } else {
+    await set(ref(db, '/orders/' + currentTableKey), { items, startedAt: order.startedAt });
+  }
 }
 
-function markPaid(){
-  const order = DB.orders[currentTableId];
-  if(!order || order.items.length===0) return;
-  const table = DB.tables.find(t=>t.id===currentTableId);
-  DB.sales.push({
-    id: 'sale_' + Date.now(),
-    tableId: currentTableId,
+async function markPaid(){
+  const order = DB.orders[currentTableKey];
+  if(!order || !order.items || order.items.length===0) return;
+  const table = DB.tables[currentTableKey];
+  const saleRef = push(ref(db, '/sales'));
+  await set(saleRef, {
+    tableKey: currentTableKey,
     tableNo: table.no,
     items: order.items,
     total: orderTotal(order),
     paidAt: Date.now()
   });
-  delete DB.orders[currentTableId];
-  saveData(DB);
+  await remove(ref(db, '/orders/' + currentTableKey));
   renderHome();
   switchView('home');
 }
@@ -714,16 +775,17 @@ function bindXercler(){
 }
 
 function renderXercler(){
-  const total = DB.expenses.reduce((s,e)=>s+e.amount,0);
+  const expenses = expensesArray();
+  const total = expenses.reduce((s,e)=>s+e.amount,0);
   document.getElementById('totalExpenses').textContent = money(total);
 
   const list = document.getElementById('expenseList');
   list.innerHTML = '';
-  if(DB.expenses.length === 0){
+  if(expenses.length === 0){
     list.innerHTML = '<div class="empty-note">Hələ xərc qeydə alınmayıb.</div>';
     return;
   }
-  const sorted = [...DB.expenses].sort((a,b)=>b.date-a.date);
+  const sorted = expenses.sort((a,b)=>b.date-a.date);
   sorted.forEach(e=>{
     const row = document.createElement('div');
     row.className = 'expense-row';
@@ -735,18 +797,16 @@ function renderXercler(){
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <span class="amt">${money(e.amount)}</span>
-        <button class="del" data-id="${e.id}" title="Sil">×</button>
+        <button class="del" data-key="${e.key}" title="Sil">×</button>
       </div>
     `;
-    row.querySelector('.del').addEventListener('click', ()=> deleteExpense(e.id));
+    row.querySelector('.del').addEventListener('click', ()=> deleteExpense(e.key));
     list.appendChild(row);
   });
 }
 
-function deleteExpense(id){
-  DB.expenses = DB.expenses.filter(e=>e.id !== id);
-  saveData(DB);
-  renderXercler();
+async function deleteExpense(key){
+  await remove(ref(db, '/expenses/' + key));
 }
 
 function openAddExpenseModal(){
@@ -778,16 +838,14 @@ function openAddExpenseModal(){
   const close = ()=> root.innerHTML = '';
   document.getElementById('modalBackdrop').addEventListener('click', (e)=>{ if(e.target.id==='modalBackdrop') close(); });
   document.getElementById('modalCancel').addEventListener('click', close);
-  document.getElementById('modalConfirm').addEventListener('click', ()=>{
+  document.getElementById('modalConfirm').addEventListener('click', async ()=>{
     const name = document.getElementById('newExpenseName').value.trim();
     const amount = parseFloat(document.getElementById('newExpenseAmount').value);
     const dateVal = document.getElementById('newExpenseDate').value;
     if(!name || isNaN(amount) || amount < 0 || !dateVal) return;
     const date = new Date(dateVal + 'T12:00:00').getTime();
-    DB.expenses.push({ id: 'exp_' + Date.now(), name, amount, date });
-    saveData(DB);
+    await push(ref(db, '/expenses'), { name, amount, date });
     close();
-    renderXercler();
   });
   setTimeout(()=>document.getElementById('newExpenseName').focus(), 50);
 }
@@ -819,14 +877,12 @@ function openAddProductModal(){
   const close = ()=> root.innerHTML = '';
   document.getElementById('modalBackdrop').addEventListener('click', (e)=>{ if(e.target.id==='modalBackdrop') close(); });
   document.getElementById('modalCancel').addEventListener('click', close);
-  document.getElementById('modalConfirm').addEventListener('click', ()=>{
+  document.getElementById('modalConfirm').addEventListener('click', async ()=>{
     const name = document.getElementById('newProductName').value.trim();
     const price = parseFloat(document.getElementById('newProductPrice').value);
     if(!name || isNaN(price) || price < 0) return;
-    DB.products.push({ id: 'p_' + Date.now(), name, price });
-    saveData(DB);
+    await push(ref(db, '/products'), { name, price });
     close();
-    if(document.getElementById('view-masa').classList.contains('active')) renderMasa();
   });
   setTimeout(()=>document.getElementById('newProductName').focus(), 50);
 }
