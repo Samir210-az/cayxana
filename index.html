@@ -249,6 +249,11 @@ header.top{
   width:26px;height:26px;border-radius:50%;background:var(--surface2);
   border:1px solid var(--border);font-size:14px;color:var(--text-dim);flex-shrink:0;
 }
+.row-actions{display:flex;gap:8px;flex-shrink:0}
+.row-actions .edit{
+  width:26px;height:26px;border-radius:50%;background:var(--surface2);
+  border:1px solid var(--border);font-size:12px;color:var(--amber-300);flex-shrink:0;
+}
 
 .report-grid{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
 .report-card{
@@ -963,8 +968,12 @@ function renderMehsullar(){
         <div class="nm">${p.name}</div>
         <div class="dt">${money(p.price)}</div>
       </div>
-      <button class="del" data-key="${p.key}" title="Sil">×</button>
+      <div class="row-actions">
+        <button class="edit" data-key="${p.key}" title="Redaktə et">✎</button>
+        <button class="del" data-key="${p.key}" title="Sil">×</button>
+      </div>
     `;
+    row.querySelector('.edit').addEventListener('click', ()=> openEditProductModal(p));
     row.querySelector('.del').addEventListener('click', ()=> deleteProduct(p.key));
     list.appendChild(row);
   });
@@ -1019,6 +1028,57 @@ function openAddExpenseModal(){
    əlavə et" ilə hamısını bir dəfəyə həm daimi kataloqa, həm də
    cari sifarişə yazır.
    ============================================================ */
+/* ============================================================
+   MODAL — Məhsulu redaktə et (ad/qiymət dəyişikliyi)
+   ============================================================ */
+function openEditProductModal(product){
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modalBackdrop">
+      <div class="modal">
+        <h3>Məhsulu redaktə et</h3>
+        <div class="field">
+          <label>Ad</label>
+          <input id="editProductName" type="text" value="${product.name}">
+        </div>
+        <div class="field">
+          <label>Qiymət (₼)</label>
+          <input id="editProductPrice" type="number" step="0.01" min="0" value="${product.price}">
+        </div>
+        <div class="modal-actions">
+          <button class="cancel" id="modalCancel">Ləğv et</button>
+          <button class="confirm" id="modalSave">Yadda saxla</button>
+        </div>
+      </div>
+    </div>
+  `;
+  const close = ()=> root.innerHTML = '';
+  const nameInput = document.getElementById('editProductName');
+  const priceInput = document.getElementById('editProductPrice');
+  const saveBtn = document.getElementById('modalSave');
+
+  async function save(){
+    const name = nameInput.value.trim();
+    const price = parseFloat(priceInput.value);
+    if(!name){ nameInput.focus(); return; }
+    if(isNaN(price) || price < 0){ priceInput.focus(); return; }
+    saveBtn.disabled = true;
+    try{
+      await update(ref(db, '/products/' + product.key), { name, price });
+      close();
+    }catch(err){
+      saveBtn.disabled = false;
+      reportError(err);
+    }
+  }
+
+  document.getElementById('modalBackdrop').addEventListener('click', (e)=>{ if(e.target.id==='modalBackdrop') close(); });
+  document.getElementById('modalCancel').addEventListener('click', close);
+  saveBtn.addEventListener('click', save);
+  priceInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); save(); } });
+  setTimeout(()=>{ nameInput.focus(); nameInput.select(); }, 50);
+}
+
 function openAddProductModal(){
   const added = []; // bu sessiyada əlavə olunanların qısa siyahısı (yalnız məlumat üçün)
   const root = document.getElementById('modalRoot');
