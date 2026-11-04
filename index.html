@@ -511,7 +511,7 @@ const db = getDatabase(fbApp);
      /expenses:   { "-Nx...": { name, amount, date } }
      /quickPicks: { "-Nx...": { name } }  — istifadəçinin özünün idarə etdiyi sürətli-doldurma adları
    ============================================================ */
-const rootRef = ref(db, '/');
+const DB_KEYS = ['tables','products','orders','sales','expenses','quickPicks'];
 
 function defaultData(){
   const tables = {};
@@ -533,26 +533,28 @@ let appReady = false;
 
 async function ensureSeeded(){
   try{
-    const snap = await get(rootRef);
-    if(!snap.exists()){
-      await set(rootRef, defaultData());
+    const [tablesSnap, productsSnap] = await Promise.all([
+      get(ref(db, '/tables')),
+      get(ref(db, '/products'))
+    ]);
+    if(!tablesSnap.exists() && !productsSnap.exists()){
+      const d = defaultData();
+      await set(ref(db, '/tables'), d.tables);
+      await set(ref(db, '/products'), d.products);
     }
   }catch(err){ reportError(err); }
 }
 
 function attachRealtimeListener(){
-  onValue(rootRef, (snap)=>{
-    const val = snap.val() || {};
-    DB = {
-      tables: val.tables || {},
-      products: val.products || {},
-      orders: val.orders || {},
-      sales: val.sales || {},
-      expenses: val.expenses || {},
-      quickPicks: val.quickPicks || {}
-    };
-    if(!appReady){ appReady = true; renderHome(); }
-    else { rerenderActive(); }
+  const raw = {};
+  DB_KEYS.forEach((key)=>{
+    onValue(ref(db, '/' + key), (snap)=>{
+      raw[key] = snap.val() || {};
+      if(DB_KEYS.some(k => !(k in raw))) return;
+      DB = { ...raw };
+      if(!appReady){ appReady = true; renderHome(); }
+      else { rerenderActive(); }
+    }, (err)=> reportError(err));
   });
 }
 
