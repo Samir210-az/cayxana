@@ -183,6 +183,10 @@ header.top{
   border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;
 }
 .masa-head h2{font-size:19px;font-weight:800}
+.del-table-btn{
+  margin-left:auto;height:38px;padding:0 14px;border-radius:19px;background:var(--red-bg);
+  border:1px solid var(--red-bd);color:var(--red);font-size:13px;font-weight:700;
+}
 
 .products-grid{
   margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;
@@ -379,6 +383,7 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
     <div class="masa-head">
       <button class="back-btn" id="btnBackHome">←</button>
       <h2 id="masaTitle">Masa</h2>
+      <button class="del-table-btn" id="btnDelTable">Stolu sil</button>
     </div>
 
     <div class="products-grid" id="productsGrid"></div>
@@ -800,6 +805,24 @@ async function addTable(){
 function bindMasa(){
   document.getElementById('btnBackHome').addEventListener('click', ()=>{ renderHome(); switchView('home'); });
   document.getElementById('btnPay').addEventListener('click', markPaid);
+  document.getElementById('btnDelTable').addEventListener('click', deleteTable);
+}
+
+async function deleteTable(){
+  const table = DB.tables[currentTableKey];
+  if(!table) return;
+  const order = DB.orders[currentTableKey];
+  if(order && order.items && Object.keys(order.items).length > 0){
+    alert('Masa ' + table.no + '-də açıq sifariş var. Əvvəlcə "Ödənildi" ilə bağlayın.');
+    return;
+  }
+  if(!confirm('Masa ' + table.no + ' silinsin?')) return;
+  try{
+    await remove(ref(db, '/tables/' + currentTableKey));
+    currentTableKey = null;
+    renderHome();
+    switchView('home');
+  }catch(err){ reportError(err); }
 }
 
 function openMasa(tableKey){
