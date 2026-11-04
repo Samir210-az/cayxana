@@ -326,7 +326,7 @@ header.top{
 .confirm:disabled{opacity:.5}
 
 footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)}
-#resetTapTarget{user-select:none;-webkit-user-select:none}
+#resetTapTarget{user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .install-btn{
   display:block;margin:12px auto 0;padding:9px 18px;border-radius:var(--r-sm);
   background:var(--surface);border:1px solid var(--border);color:var(--amber-300);
@@ -355,7 +355,7 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
 <div id="app">
   <header class="top">
     <div class="top-row">
-      <div class="brand"><span class="cup">🍵</span><h1>Çayxana</h1></div>
+      <div class="brand" id="resetTapTarget"><span class="cup">🍵</span><h1>Çayxana</h1></div>
       <div class="nav-btns">
         <button class="nav-btn" data-nav="home">Stollar</button>
         <button class="nav-btn" data-nav="hesabat">Hesabat</button>
@@ -438,7 +438,7 @@ footer{text-align:center;padding:20px 0 4px;font-size:11px;color:var(--text-dim)
   </section>
 
   <footer>
-    <span id="resetTapTarget">Çayxana idarəetmə paneli</span>
+    <span>Çayxana idarəetmə paneli</span>
     <button id="installBtn" class="install-btn hidden">⬇️ Telefona yüklə</button>
   </footer>
 </div>
@@ -583,7 +583,7 @@ async function initApp(){
   attachRealtimeListener();
 }
 
-// Gizli test-data sıfırlama: footer mətninə 2 saniyə ərzində 6 dəfə ardıcıl
+// Gizli test-data sıfırlama: yuxarıdakı loqoya (🍵 Çayxana) 2 saniyə ərzində 6 dəfə ardıcıl
 // vurulduqda satış/sifariş/xərc tarixçəsini təsdiqlə silir. Stollar, məhsullar
 // və sürətli-seçimlərə toxunmur.
 function bindResetTap(){
